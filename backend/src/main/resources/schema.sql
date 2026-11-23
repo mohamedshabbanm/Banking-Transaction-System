@@ -1,0 +1,111 @@
+-- Ershak database schema (SQLite).
+-- Money is stored as TEXT and handled as BigDecimal in Java to avoid rounding errors.
+-- Times are epoch milliseconds.
+
+CREATE TABLE IF NOT EXISTS users (
+    id                   INTEGER PRIMARY KEY AUTOINCREMENT,
+    full_name            TEXT    NOT NULL,
+    email                TEXT    NOT NULL UNIQUE,
+    phone                TEXT    NOT NULL UNIQUE,
+    username             TEXT    NOT NULL UNIQUE,
+    password_hash        TEXT    NOT NULL,
+    salt                 TEXT    NOT NULL,
+    role                 TEXT    NOT NULL CHECK (role IN ('CUSTOMER', 'ADMIN')),
+    failed_attempts      INTEGER NOT NULL DEFAULT 0,
+    locked_until         INTEGER NOT NULL DEFAULT 0,
+    must_change_password INTEGER NOT NULL DEFAULT 0,
+    created_at           INTEGER NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS accounts (
+    id             INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id        INTEGER NOT NULL REFERENCES users (id),
+    account_number TEXT    NOT NULL UNIQUE,
+    type           TEXT    NOT NULL CHECK (type IN ('SAVINGS', 'CURRENT')),
+    balance        TEXT    NOT NULL,
+    hold_amount    TEXT    NOT NULL DEFAULT '0.00',
+    status         TEXT    NOT NULL CHECK (status IN ('ACTIVE', 'FROZEN', 'CLOSED')),
+    opened_at      INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_accounts_user ON accounts (user_id);
+
+CREATE TABLE IF NOT EXISTS transactions (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    reference       TEXT    NOT NULL UNIQUE,
+    type            TEXT    NOT NULL,
+    from_account_id INTEGER REFERENCES accounts (id),
+    to_account_id   INTEGER REFERENCES accounts (id),
+    amount          TEXT    NOT NULL,
+    fee             TEXT    NOT NULL DEFAULT '0.00',
+    status          TEXT    NOT NULL,
+    initiated_by    INTEGER NOT NULL REFERENCES users (id),
+    note            TEXT,
+    created_at      INTEGER NOT NULL,
+    completed_at    INTEGER
+);
+CREATE INDEX IF NOT EXISTS idx_tx_from ON transactions (from_account_id, created_at);
+CREATE INDEX IF NOT EXISTS idx_tx_to ON transactions (to_account_id, created_at);
+CREATE INDEX IF NOT EXISTS idx_tx_user ON transactions (initiated_by, created_at);
+
+CREATE TABLE IF NOT EXISTS fraud_events (
+    id             INTEGER PRIMARY KEY AUTOINCREMENT,
+    transaction_id INTEGER NOT NULL UNIQUE REFERENCES transactions (id),
+    score          INTEGER NOT NULL,
+    rules          TEXT    NOT NULL,
+    decision       TEXT    NOT NULL,
+    reviewed_by    INTEGER REFERENCES users (id),
+    reviewed_at    INTEGER,
+    created_at     INTEGER NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS otp_codes (
+    transaction_id INTEGER PRIMARY KEY REFERENCES transactions (id),
+    code_hash      TEXT    NOT NULL,
+    expires_at     INTEGER NOT NULL,
+    attempts       INTEGER NOT NULL DEFAULT 0
+);
+
+CREATE TABLE IF NOT EXISTS savings_goals (
+    id            INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id       INTEGER NOT NULL REFERENCES users (id),
+    account_id    INTEGER NOT NULL REFERENCES accounts (id),
+    name          TEXT    NOT NULL,
+    target_amount TEXT    NOT NULL,
+    saved_amount  TEXT    NOT NULL DEFAULT '0.00',
+    target_date   TEXT,
+    status        TEXT    NOT NULL,
+    created_at    INTEGER NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS notifications (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id    INTEGER NOT NULL REFERENCES users (id),
+    kind       TEXT    NOT NULL,
+    title      TEXT    NOT NULL,
+    message    TEXT    NOT NULL,
+    is_read    INTEGER NOT NULL DEFAULT 0,
+    created_at INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_notifications_user ON notifications (user_id, created_at);
+
+CREATE TABLE IF NOT EXISTS sms_messages (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id    INTEGER NOT NULL REFERENCES users (id),
+    message    TEXT    NOT NULL,
+    created_at INTEGER NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS audit_log (
+    id            INTEGER PRIMARY KEY AUTOINCREMENT,
+    ts            INTEGER NOT NULL,
+    actor         TEXT    NOT NULL,
+    action        TEXT    NOT NULL,
+    details       TEXT    NOT NULL,
+    previous_hash TEXT    NOT NULL,
+    hash          TEXT    NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS settings (
+    key   TEXT PRIMARY KEY,
+    value TEXT NOT NULL
+);

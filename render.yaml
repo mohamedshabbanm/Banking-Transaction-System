@@ -1,0 +1,18 @@
+# Render Blueprint: New + > Blueprint, pick this repo, and it reads this file.
+services:
+  - type: web
+    name: ershak
+    runtime: docker
+    plan: free            # free = the database resets when the service sleeps. See README > Hosting.
+    healthCheckPath: /api/health
+    envVars:
+      - key: ERSHAK_DEMO_DATA
+        value: "true"
+      - key: ERSHAK_ADMIN_PASSWORD   # the password every officer starts with (they must change it at first login)
+        sync: false
+    # To keep data between restarts, use a paid plan and uncomment:
+    # plan: starter
+    # disk:
+    #   name: ershak-data
+    #   mountPath: /data
+    #   sizeGB: 1
